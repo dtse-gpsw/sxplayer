@@ -1,6 +1,8 @@
 cimport sxplayer_py
 import numpy as np
 
+class DecodeError(RuntimeError): pass
+
 class Frame(object):
     def get_mat(self):
         return self.ndarray
@@ -40,7 +42,8 @@ cdef class Decoder(object):
 
     def info(self):
         cdef sxplayer_py.sxplayer_info info
-        sxplayer_get_info(self.ctx, &info)
+        if sxplayer_get_info(self.ctx, &info) < 0:
+            raise DecodeError('sxplayer_get_info() < 0')
 
         return {
             'width': info.width,
@@ -66,7 +69,8 @@ cdef class Decoder(object):
         frame = sxplayer_get_frame(self.ctx, t)
 
         if frame == NULL:
-            sxplayer_seek(self.ctx, t)
+            if sxplayer_seek(self.ctx, t) < 0:
+                raise DecodeError('sxplayer_seek() < 0')
             frame = sxplayer_get_frame(self.ctx, t)
 
         cdef uint8_t[:, :, :] data
