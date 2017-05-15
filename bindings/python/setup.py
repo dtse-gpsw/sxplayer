@@ -6,7 +6,8 @@ extensions = [
     Extension(
       "sxplayer_py", ["sxplayer_py.pyx"],
       libraries=["sxplayer", "avcodec", "avformat", "avfilter"],
-      library_dirs=[os.getcwd(), "/usr/local/lib"])]
+      library_dirs=["../..", "/usr/local/lib"],
+      include_dirs=["../.."])]
 
 setup(
   name = 'sxplayer python',
