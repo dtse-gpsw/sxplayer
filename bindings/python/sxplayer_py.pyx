@@ -25,6 +25,9 @@ cdef class Decoder(object):
         self.ctx = sxplayer_create(fn)
         self.started = False
 
+    def set_option(self, key, value):
+        return sxplayer_set_option(self.ctx, key, value)
+
     def __dealloc__(self):
         sxplayer_free(&self.ctx)
 
@@ -60,7 +63,30 @@ cdef class Decoder(object):
         sxplayer_get_duration(self.ctx, &result)
         return result
 
-    def get_frame(self, t):
+    def get_mvs(self, double t):
+        if not self.started:
+            sxplayer_start(self.ctx)
+            self.started = True
+
+        cdef sxplayer_py.sxplayer_frame* frame
+        frame = sxplayer_get_frame(self.ctx, t)
+
+        if frame == NULL:
+            if sxplayer_seek(self.ctx, t) < 0:
+                raise DecodeError('sxplayer_seek() < 0')
+            frame = sxplayer_get_frame(self.ctx, t)
+
+        cdef AVMotionVector[:] data
+        if frame.nb_mvs == 0: return None
+
+        data = <AVMotionVector[:frame.nb_mvs]> frame.mvs
+        data_copy = np.asarray(data).copy()
+
+        sxplayer_release_frame(frame)
+
+        return data_copy
+
+    def get_frame(self, double t):
         if not self.started:
             sxplayer_start(self.ctx)
             self.started = True
@@ -82,5 +108,5 @@ cdef class Decoder(object):
         else:
             return None
 
-    def decode(self, frame_number, resolution=480):
+    def decode(self, int frame_number, int resolution=480):
         return self.get_frame(frame_number / self.assumed_fps)
