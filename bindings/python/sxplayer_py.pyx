@@ -14,12 +14,17 @@ cdef class FrameFinaliser:
 
 cdef class Frame(object):
     cdef cnp.ndarray ndarray
+    cdef list mvs
 
     def get_mat(self):
         return self.ndarray
 
-    def __cinit__(self, cnp.ndarray ndarray):
+    def get_mvs(self):
+        return self.mvs
+
+    def __cinit__(self, cnp.ndarray ndarray, list mvs=None):
         self.ndarray = ndarray
+        self.mvs = mvs
 
 cdef void set_base(cnp.ndarray ndarray,
     sxplayer_py.sxplayer_frame* frame,
@@ -36,13 +41,11 @@ cdef class Decoder(object):
     cdef int started
 
     cdef str fn
-    cdef double assumed_fps
 
     cdef int _nframes
 
     def __init__(self, fn):
         self.fn = fn
-        self.assumed_fps = 30.
 
     def __cinit__(self, fn):
         self.ctx = sxplayer_create(fn)
@@ -98,31 +101,6 @@ cdef class Decoder(object):
         sxplayer_get_duration(self.ctx, &result)
         return result
 
-    def get_mvs(self, double t):
-        if not self.started:
-            sxplayer_start(self.ctx)
-            self.started = True
-
-        cdef sxplayer_py.sxplayer_frame* frame
-        frame = sxplayer_get_frame(self.ctx, t)
-
-        if frame == NULL:
-            if sxplayer_seek(self.ctx, t) < 0:
-                raise DecodeError('sxplayer_seek() < 0')
-            frame = sxplayer_get_frame(self.ctx, t)
-
-        cdef AVMotionVector[:] data
-        if frame.nb_mvs == 0:
-            sxplayer_release_frame(frame)
-            return None
-        else:
-            data = <AVMotionVector[:frame.nb_mvs]> frame.mvs
-            data_copy = np.asarray(data).copy()
-
-            sxplayer_release_frame(frame)
-
-            return data_copy
-
     def get_frame(self, double t):
         if not self.started:
             sxplayer_start(self.ctx)
@@ -138,6 +116,7 @@ cdef class Decoder(object):
 
         cdef uint8_t[:, :, :] data
         cdef cnp.ndarray ndarray
+        cdef AVMotionVector[:] mvs
         if frame != NULL:
             data = <uint8_t[:frame.height, :frame.width, :4]> frame.data
             ndarray = np.asarray(data[:, :, :3])
@@ -145,7 +124,13 @@ cdef class Decoder(object):
             # attach a finaliser to the ndarray to release the frame
             set_base(ndarray, frame, int(t * self.fps))
 
-            return Frame(ndarray)
+            wrapper = Frame(ndarray)
+
+            if frame.nb_mvs != 0:
+                mvs = <AVMotionVector[:frame.nb_mvs]> frame.mvs
+                wrapper.mvs = list(mvs)
+
+            return wrapper
         else:
             return None
 
