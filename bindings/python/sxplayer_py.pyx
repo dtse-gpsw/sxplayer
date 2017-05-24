@@ -1,14 +1,35 @@
 cimport sxplayer_py
 import numpy as np
+cimport numpy as cnp
 
 class DecodeError(RuntimeError): pass
 
-class Frame(object):
+cdef class FrameFinaliser:
+    cdef sxplayer_py.sxplayer_frame* frame
+    cdef int frame_no
+
+    def __dealloc__(self):
+        if self.frame is not NULL:
+            sxplayer_release_frame(self.frame)
+
+cdef class Frame(object):
+    cdef cnp.ndarray ndarray
+
     def get_mat(self):
         return self.ndarray
 
-    def __init__(self, ndarray):
+    def __cinit__(self, cnp.ndarray ndarray):
         self.ndarray = ndarray
+
+cdef void set_base(cnp.ndarray ndarray,
+    sxplayer_py.sxplayer_frame* frame,
+    int frame_no):
+
+    cdef FrameFinaliser fin = FrameFinaliser()
+    fin.frame_no = frame_no
+    fin.frame = frame
+
+    cnp.set_array_base(ndarray, fin)
 
 cdef class Decoder(object):
     cdef sxplayer_py.sxplayer_ctx* ctx
@@ -116,14 +137,18 @@ cdef class Decoder(object):
             frame = sxplayer_get_frame(self.ctx, t)
 
         cdef uint8_t[:, :, :] data
+        cdef cnp.ndarray ndarray
         if frame != NULL:
             data = <uint8_t[:frame.height, :frame.width, :4]> frame.data
-            result = Frame(np.asarray(data[:, :, :3]).copy())
-            sxplayer_release_frame(frame)
-            return result
+            ndarray = np.asarray(data[:, :, :3])
+
+            # attach a finaliser to the ndarray to release the frame
+            set_base(ndarray, frame, int(t * self.fps))
+
+            return Frame(ndarray)
         else:
             return None
 
     def decode(self, int frame_number, int resolution=480):
-        print 'decode(%d) = %f' % (frame_number, frame_number/self.fps)
+        # print 'decode(%d) = %f' % (frame_number, frame_number/self.fps)
         return self.get_frame(frame_number / self.fps)
