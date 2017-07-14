@@ -135,5 +135,4 @@ cdef class Decoder(object):
             return None
 
     def decode(self, int frame_number, int resolution=480):
-        # print 'decode(%d) = %f' % (frame_number, frame_number/self.fps)
         return self.get_frame(frame_number / self.fps)
