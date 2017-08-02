@@ -1,9 +1,13 @@
 from distutils.core import setup
 from distutils.extension import Extension
-from Cython.Build import cythonize
 import os
 
-has_source = os.path.isfile('sxplayer_py.c')
+if not os.path.isfile('sxplayer_py.c'):
+    has_source = True
+else:
+    has_source = False
+    from Cython.Build import cythonize
+
 
 extensions = [
     Extension(
